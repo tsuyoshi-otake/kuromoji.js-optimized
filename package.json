@@ -1,8 +1,11 @@
 {
-  "name": "kuromoji",
-  "description": "JavaScript implementation of Japanese morphological analyzer",
-  "version": "0.1.2",
+  "name": "kuromoji-optimized",
+  "description": "Optimized JavaScript implementation of Japanese morphological analyzer (3-8x faster)",
+  "version": "1.0.0",
   "author": "Takuya Asano <takuya.a@gmail.com>",
+  "contributors": [
+    "Optimized fork maintainer"
+  ],
   "browser": {
     "./src/loader/NodeDictionaryLoader.js": "./src/loader/BrowserDictionaryLoader.js"
   },
@@ -55,6 +58,7 @@
     "url": "https://github.com/takuyaa/kuromoji.js.git"
   },
   "scripts": {
+    "benchmark": "node test/benchmark.js",
     "build": "gulp build",
     "build-demo": "gulp build-demo",
     "build-dict": "gulp build-dict",

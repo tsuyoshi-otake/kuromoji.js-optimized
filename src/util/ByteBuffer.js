@@ -17,6 +17,10 @@
 
 "use strict";
 
+// Use native TextEncoder/TextDecoder for performance
+var encoder = new TextEncoder();
+var decoder = new TextDecoder("utf-8");
+
 /**
  * Convert String (UTF-16) to UTF-8 ArrayBuffer
  *
@@ -24,62 +28,7 @@
  * @return {Uint8Array} Byte sequence encoded by UTF-8
  */
 var stringToUtf8Bytes = function (str) {
-
-    // Max size of 1 character is 4 bytes
-    var bytes = new Uint8Array(str.length * 4);
-
-    var i = 0, j = 0;
-
-    while (i < str.length) {
-        var unicode_code;
-
-        var utf16_code = str.charCodeAt(i++);
-        if (utf16_code >= 0xD800 && utf16_code <= 0xDBFF) {
-            // surrogate pair
-            var upper = utf16_code;           // high surrogate
-            var lower = str.charCodeAt(i++);  // low surrogate
-
-            if (lower >= 0xDC00 && lower <= 0xDFFF) {
-                unicode_code =
-                    (upper - 0xD800) * (1 << 10) + (1 << 16) +
-                    (lower - 0xDC00);
-            } else {
-                // malformed surrogate pair
-                return null;
-            }
-        } else {
-            // not surrogate code
-            unicode_code = utf16_code;
-        }
-
-        if (unicode_code < 0x80) {
-            // 1-byte
-            bytes[j++] = unicode_code;
-
-        } else if (unicode_code < (1 << 11)) {
-            // 2-byte
-            bytes[j++] = (unicode_code >>> 6) | 0xC0;
-            bytes[j++] = (unicode_code & 0x3F) | 0x80;
-
-        } else if (unicode_code < (1 << 16)) {
-            // 3-byte
-            bytes[j++] = (unicode_code >>> 12) | 0xE0;
-            bytes[j++] = ((unicode_code >> 6) & 0x3f) | 0x80;
-            bytes[j++] = (unicode_code & 0x3F) | 0x80;
-
-        } else if (unicode_code < (1 << 21)) {
-            // 4-byte
-            bytes[j++] = (unicode_code >>> 18) | 0xF0;
-            bytes[j++] = ((unicode_code >> 12) & 0x3F) | 0x80;
-            bytes[j++] = ((unicode_code >> 6) & 0x3F) | 0x80;
-            bytes[j++] = (unicode_code & 0x3F) | 0x80;
-
-        } else {
-            // malformed UCS4 code
-        }
-    }
-
-    return bytes.subarray(0, j);
+    return encoder.encode(str);
 };
 
 /**
@@ -89,47 +38,7 @@ var stringToUtf8Bytes = function (str) {
  * @return {String} String encoded by UTF-16
  */
 var utf8BytesToString = function (bytes) {
-
-    var str = "";
-    var code, b1, b2, b3, b4, upper, lower;
-    var i = 0;
-
-    while (i < bytes.length) {
-
-        b1 = bytes[i++];
-
-        if (b1 < 0x80) {
-            // 1 byte
-            code = b1;
-        } else if ((b1 >> 5) === 0x06) {
-            // 2 bytes
-            b2 = bytes[i++];
-            code = ((b1 & 0x1f) << 6) | (b2 & 0x3f);
-        } else if ((b1 >> 4) === 0x0e) {
-            // 3 bytes
-            b2 = bytes[i++];
-            b3 = bytes[i++];
-            code = ((b1 & 0x0f) << 12) | ((b2 & 0x3f) << 6) | (b3 & 0x3f);
-        } else {
-            // 4 bytes
-            b2 = bytes[i++];
-            b3 = bytes[i++];
-            b4 = bytes[i++];
-            code = ((b1 & 0x07) << 18) | ((b2 & 0x3f) << 12) | ((b3 & 0x3f) << 6) | (b4 & 0x3f);
-        }
-
-        if (code < 0x10000) {
-            str += String.fromCharCode(code);
-        } else {
-            // surrogate pair
-            code -= 0x10000;
-            upper = (0xD800 | (code >> 10));
-            lower = (0xDC00 | (code & 0x3FF));
-            str += String.fromCharCode(upper, lower);
-        }
-    }
-
-    return str;
+    return decoder.decode(new Uint8Array(bytes));
 };
 
 /**
@@ -145,7 +54,8 @@ function ByteBuffer(arg) {
         initial_size = arg;
     } else if (arg instanceof Uint8Array) {
         this.buffer = arg;
-        this.position = 0;  // Overwrite
+        this.position = 0;
+        this._dataView = new DataView(arg.buffer, arg.byteOffset, arg.byteLength);
         return;
     } else {
         // typeof arg -> String
@@ -154,6 +64,7 @@ function ByteBuffer(arg) {
     // arg is null or number
     this.buffer = new Uint8Array(initial_size);
     this.position = 0;
+    this._dataView = new DataView(this.buffer.buffer);
 }
 
 ByteBuffer.prototype.size = function () {
@@ -164,10 +75,12 @@ ByteBuffer.prototype.reallocate = function () {
     var new_array = new Uint8Array(this.buffer.length * 2);
     new_array.set(this.buffer);
     this.buffer = new_array;
+    this._dataView = new DataView(new_array.buffer);
 };
 
 ByteBuffer.prototype.shrink = function () {
     this.buffer = this.buffer.subarray(0, this.position);
+    this._dataView = new DataView(this.buffer.buffer, this.buffer.byteOffset, this.buffer.byteLength);
     return this.buffer;
 };
 
@@ -200,22 +113,16 @@ ByteBuffer.prototype.putShort = function (num) {
     this.put(upper);
 };
 
-// Read short from buffer by little endian
+// Read short from buffer by little endian (hot path - no bounds check when index provided)
 ByteBuffer.prototype.getShort = function (index) {
     if (index == null) {
         index = this.position;
         this.position += 2;
+        if (this.buffer.length < index + 2) {
+            return 0;
+        }
     }
-    if (this.buffer.length < index + 2) {
-        return 0;
-    }
-    var lower = this.buffer[index];
-    var upper = this.buffer[index + 1];
-    var value = (upper << 8) + lower;
-    if (value & 0x8000) {
-	value = -((value - 1) ^ 0xFFFF);
-    }
-    return value;
+    return this._dataView.getInt16(index, true);
 };
 
 // Write integer to buffer by little endian
@@ -242,18 +149,16 @@ ByteBuffer.prototype.getInt = function (index) {
     if (this.buffer.length < index + 4) {
         return 0;
     }
-    var b0 = this.buffer[index];
-    var b1 = this.buffer[index + 1];
-    var b2 = this.buffer[index + 2];
-    var b3 = this.buffer[index + 3];
-
-    return (b3 << 24) + (b2 << 16) + (b1 << 8) + b0;
+    return this._dataView.getUint32(index, true);
 };
 
 ByteBuffer.prototype.readInt = function () {
     var pos = this.position;
     this.position += 4;
-    return this.getInt(pos);
+    if (this.buffer.length < pos + 4) {
+        return 0;
+    }
+    return this._dataView.getUint32(pos, true);
 };
 
 ByteBuffer.prototype.putString = function (str) {
@@ -266,24 +171,19 @@ ByteBuffer.prototype.putString = function (str) {
 };
 
 ByteBuffer.prototype.getString = function (index) {
-    var buf = [],
-        ch;
     if (index == null) {
         index = this.position;
     }
-    while (true) {
-        if (this.buffer.length < index + 1) {
-            break;
-        }
-        ch = this.get(index++);
-        if (ch === 0) {
-            break;
-        } else {
-            buf.push(ch);
-        }
+    // Find null terminator
+    var start = index;
+    var buffer = this.buffer;
+    var len = buffer.length;
+    while (index < len && buffer[index] !== 0) {
+        index++;
     }
-    this.position = index;
-    return utf8BytesToString(buf);
+    this.position = index + 1;
+    // Use subarray for zero-copy and decode directly
+    return decoder.decode(buffer.subarray(start, index));
 };
 
 module.exports = ByteBuffer;

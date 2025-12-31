@@ -43,11 +43,7 @@ ConnectionCosts.prototype.put = function (forward_id, backward_id, cost) {
 };
 
 ConnectionCosts.prototype.get = function (forward_id, backward_id) {
-    var index = forward_id * this.backward_dimension + backward_id + 2;
-    if (this.buffer.length < index + 1) {
-        throw "ConnectionCosts buffer overflow";
-    }
-    return this.buffer[index];
+    return this.buffer[forward_id * this.backward_dimension + backward_id + 2];
 };
 
 ConnectionCosts.prototype.loadConnectionCosts = function (connection_costs_buffer) {

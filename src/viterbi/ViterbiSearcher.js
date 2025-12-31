@@ -17,6 +17,10 @@
 
 "use strict";
 
+var ViterbiNode = require("./ViterbiNode");
+var NODE_TYPE = ViterbiNode.NODE_TYPE;
+var MAX_COST = ViterbiNode.MAX_COST;
+
 /**
  * ViterbiSearcher is for searching best Viterbi path
  * @param {ConnectionCosts} connection_costs Connection costs matrix
@@ -24,6 +28,9 @@
  */
 function ViterbiSearcher(connection_costs) {
     this.connection_costs = connection_costs;
+    // Cache for inline connection cost lookup
+    this._cc_buffer = connection_costs.buffer;
+    this._cc_backward_dim = connection_costs.backward_dimension;
 }
 
 /**
@@ -37,35 +44,35 @@ ViterbiSearcher.prototype.search = function (lattice) {
 };
 
 ViterbiSearcher.prototype.forward = function (lattice) {
-    var i, j, k;
-    for (i = 1; i <= lattice.eos_pos; i++) {
-        var nodes = lattice.nodes_end_at[i];
+    var nodes_end_at = lattice.nodes_end_at;
+    var eos_pos = lattice.eos_pos;
+    // Inline connection costs lookup for speed
+    var cc_buffer = this._cc_buffer;
+    var cc_backward_dim = this._cc_backward_dim;
+
+    for (var i = 1; i <= eos_pos; i++) {
+        var nodes = nodes_end_at[i];
         if (nodes == null) {
             continue;
         }
-        for (j = 0; j < nodes.length; j++) {
+        var nodesLen = nodes.length;
+        for (var j = 0; j < nodesLen; j++) {
             var node = nodes[j];
-            var cost = Number.MAX_VALUE;
+            var cost = MAX_COST;
             var shortest_prev_node;
+            var node_cost = node.cost;
+            var node_left_id = node.left_id;
 
-            var prev_nodes = lattice.nodes_end_at[node.start_pos - 1];
+            var prev_nodes = nodes_end_at[node.start_pos - 1];
             if (prev_nodes == null) {
-                // TODO process unknown words (repair word lattice)
                 continue;
             }
-            for (k = 0; k < prev_nodes.length; k++) {
+            var prevLen = prev_nodes.length;
+            for (var k = 0; k < prevLen; k++) {
                 var prev_node = prev_nodes[k];
-
-                var edge_cost;
-                if (node.left_id == null || prev_node.right_id == null) {
-                    // TODO assert
-                    console.log("Left or right is null");
-                    edge_cost = 0;
-                } else {
-                    edge_cost = this.connection_costs.get(prev_node.right_id, node.left_id);
-                }
-
-                var _cost = prev_node.shortest_cost + edge_cost + node.cost;
+                // Inline: connection_costs.get(forward_id, backward_id) = buffer[forward_id * backward_dimension + backward_id + 2]
+                var cc = cc_buffer[prev_node.right_id * cc_backward_dim + node_left_id + 2];
+                var _cost = prev_node.shortest_cost + cc + node_cost;
                 if (_cost < cost) {
                     shortest_prev_node = prev_node;
                     cost = _cost;
@@ -80,23 +87,35 @@ ViterbiSearcher.prototype.forward = function (lattice) {
 };
 
 ViterbiSearcher.prototype.backward = function (lattice) {
-    var shortest_path = [];
-    var eos = lattice.nodes_end_at[lattice.nodes_end_at.length - 1][0];
+    var nodes_end_at = lattice.nodes_end_at;
+    var eos = nodes_end_at[nodes_end_at.length - 1][0];
 
     var node_back = eos.prev;
     if (node_back == null) {
         return [];
     }
-    while (node_back.type !== "BOS") {
-        shortest_path.push(node_back);
-        if (node_back.prev == null) {
-            // TODO Failed to back. Process unknown words?
+
+    // Count path length first to avoid reverse()
+    var count = 0;
+    var node = node_back;
+    while (node.type !== NODE_TYPE.BOS) {
+        count++;
+        if (node.prev == null) {
             return [];
         }
-        node_back = node_back.prev;
+        node = node.prev;
     }
 
-    return shortest_path.reverse();
+    // Build path in correct order
+    var shortest_path = new Array(count);
+    var idx = count - 1;
+    node = node_back;
+    while (node.type !== NODE_TYPE.BOS) {
+        shortest_path[idx--] = node;
+        node = node.prev;
+    }
+
+    return shortest_path;
 };
 
 module.exports = ViterbiSearcher;

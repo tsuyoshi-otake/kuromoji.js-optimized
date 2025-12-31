@@ -20,8 +20,8 @@
 var ViterbiBuilder = require("./viterbi/ViterbiBuilder");
 var ViterbiSearcher = require("./viterbi/ViterbiSearcher");
 var IpadicFormatter = require("./util/IpadicFormatter");
-
-var PUNCTUATION = /、|。/;
+var ViterbiNode = require("./viterbi/ViterbiNode");
+var NODE_TYPE = ViterbiNode.NODE_TYPE;
 
 /**
  * Tokenizer
@@ -43,18 +43,18 @@ function Tokenizer(dic) {
  */
 Tokenizer.splitByPunctuation = function (input) {
     var sentences = [];
-    var tail = input;
-    while (true) {
-        if (tail === "") {
-            break;
+    var len = input.length;
+    var start = 0;
+    for (var i = 0; i < len; i++) {
+        var ch = input.charCodeAt(i);
+        // 、 = 0x3001, 。 = 0x3002
+        if (ch === 0x3001 || ch === 0x3002) {
+            sentences.push(input.substring(start, i + 1));
+            start = i + 1;
         }
-        var index = tail.search(PUNCTUATION);
-        if (index < 0) {
-            sentences.push(tail);
-            break;
-        }
-        sentences.push(tail.substring(0, index + 1));
-        tail = tail.substring(index + 1);
+    }
+    if (start < len) {
+        sentences.push(input.substring(start));
     }
     return sentences;
 };
@@ -88,23 +88,13 @@ Tokenizer.prototype.tokenizeForSentence = function (sentence, tokens) {
     for (var j = 0; j < best_path.length; j++) {
         var node = best_path[j];
 
-        var token, features, features_line;
-        if (node.type === "KNOWN") {
-            features_line = this.token_info_dictionary.getFeatures(node.name);
-            if (features_line == null) {
-                features = [];
-            } else {
-                features = features_line.split(",");
-            }
+        var token, features;
+        if (node.type === NODE_TYPE.KNOWN) {
+            features = this.token_info_dictionary.getFeaturesArray(node.name);
             token = this.formatter.formatEntry(node.name, last_pos + node.start_pos, node.type, features);
-        } else if (node.type === "UNKNOWN") {
+        } else if (node.type === NODE_TYPE.UNKNOWN) {
             // Unknown word
-            features_line = this.unknown_dictionary.getFeatures(node.name);
-            if (features_line == null) {
-                features = [];
-            } else {
-                features = features_line.split(",");
-            }
+            features = this.unknown_dictionary.getFeaturesArray(node.name);
             token = this.formatter.formatUnknownEntry(node.name, last_pos + node.start_pos, node.type, features, node.surface_form);
         } else {
             // TODO User dictionary

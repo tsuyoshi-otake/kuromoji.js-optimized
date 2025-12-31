@@ -17,6 +17,12 @@
 
 "use strict";
 
+var ViterbiNode = require("../viterbi/ViterbiNode");
+var NODE_TYPE = ViterbiNode.NODE_TYPE;
+
+// Reverse mapping for backward compatibility
+var TYPE_NAMES = ["BOS", "EOS", "KNOWN", "UNKNOWN"];
+
 /**
  * Mappings between IPADIC dictionary features and tokenized results
  * @constructor
@@ -25,43 +31,39 @@ function IpadicFormatter() {
 }
 
 IpadicFormatter.prototype.formatEntry = function (word_id, position, type, features) {
-    var token = {};
-    token.word_id = word_id;
-    token.word_type = type;
-    token.word_position = position;
-
-    token.surface_form = features[0];
-    token.pos = features[1];
-    token.pos_detail_1 = features[2];
-    token.pos_detail_2 = features[3];
-    token.pos_detail_3 = features[4];
-    token.conjugated_type = features[5];
-    token.conjugated_form = features[6];
-    token.basic_form = features[7];
-    token.reading = features[8];
-    token.pronunciation = features[9];
-
-    return token;
+    return {
+        word_id: word_id,
+        word_type: TYPE_NAMES[type],
+        word_position: position,
+        surface_form: features[0],
+        pos: features[1],
+        pos_detail_1: features[2],
+        pos_detail_2: features[3],
+        pos_detail_3: features[4],
+        conjugated_type: features[5],
+        conjugated_form: features[6],
+        basic_form: features[7],
+        reading: features[8],
+        pronunciation: features[9]
+    };
 };
 
 IpadicFormatter.prototype.formatUnknownEntry = function (word_id, position, type, features, surface_form) {
-    var token = {};
-    token.word_id = word_id;
-    token.word_type = type;
-    token.word_position = position;
-
-    token.surface_form = surface_form;
-    token.pos = features[1];
-    token.pos_detail_1 = features[2];
-    token.pos_detail_2 = features[3];
-    token.pos_detail_3 = features[4];
-    token.conjugated_type = features[5];
-    token.conjugated_form = features[6];
-    token.basic_form = features[7];
-    // token.reading = features[8];
-    // token.pronunciation = features[9];
-
-    return token;
+    return {
+        word_id: word_id,
+        word_type: TYPE_NAMES[type],
+        word_position: position,
+        surface_form: surface_form,
+        pos: features[1],
+        pos_detail_1: features[2],
+        pos_detail_2: features[3],
+        pos_detail_3: features[4],
+        conjugated_type: features[5],
+        conjugated_form: features[6],
+        basic_form: features[7],
+        reading: undefined,
+        pronunciation: undefined
+    };
 };
 
 module.exports = IpadicFormatter;

@@ -27,6 +27,8 @@ function TokenInfoDictionary() {
     this.dictionary = new ByteBuffer(10 * 1024 * 1024);
     this.target_map = {};  // trie_id (of surface form) -> token_info_id (of token)
     this.pos_buffer = new ByteBuffer(10 * 1024 * 1024);
+    this._features_cache = {};  // Cache for getFeatures results
+    this._features_array_cache = {};  // Cache for split feature arrays
 }
 
 // left_id right_id word_cost ...
@@ -136,17 +138,34 @@ TokenInfoDictionary.prototype.loadTargetMap = function (array_buffer) {
 
 /**
  * Look up features in the dictionary
- * @param {string} token_info_id_str Word ID to look up
+ * @param {number} token_info_id Word ID to look up
  * @returns {string} Features string concatenated by ","
  */
-TokenInfoDictionary.prototype.getFeatures = function (token_info_id_str) {
-    var token_info_id = parseInt(token_info_id_str);
-    if (isNaN(token_info_id)) {
-        // TODO throw error
-        return "";
+TokenInfoDictionary.prototype.getFeatures = function (token_info_id) {
+    var cached = this._features_cache[token_info_id];
+    if (cached !== undefined) {
+        return cached;
     }
     var pos_id = this.dictionary.getInt(token_info_id + 6);
-    return this.pos_buffer.getString(pos_id);
+    var features = this.pos_buffer.getString(pos_id);
+    this._features_cache[token_info_id] = features;
+    return features;
+};
+
+/**
+ * Look up features as array (cached split)
+ * @param {number} token_info_id Word ID to look up
+ * @returns {Array} Features array
+ */
+TokenInfoDictionary.prototype.getFeaturesArray = function (token_info_id) {
+    var cached = this._features_array_cache[token_info_id];
+    if (cached !== undefined) {
+        return cached;
+    }
+    var features_line = this.getFeatures(token_info_id);
+    var features = features_line == null ? [] : features_line.split(",");
+    this._features_array_cache[token_info_id] = features;
+    return features;
 };
 
 module.exports = TokenInfoDictionary;

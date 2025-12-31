@@ -19,35 +19,61 @@
 
 /**
  * String wrapper for UTF-16 surrogate pair (4 bytes)
+ * Optimized: Fast-path for strings without surrogate pairs
  * @param {string} str String to wrap
  * @constructor
  */
 function SurrogateAwareString(str) {
     this.str = str;
-    this.index_mapping = [];
+    this.index_mapping = null;
 
-    for (var pos = 0; pos < str.length; pos++) {
-        var ch = str.charAt(pos);
-        this.index_mapping.push(pos);
-        if (SurrogateAwareString.isSurrogatePair(ch)) {
-            pos++;
+    // Quick scan for surrogates (most Japanese text doesn't have them)
+    var has_surrogates = false;
+    var len = str.length;
+    for (var i = 0; i < len; i++) {
+        var code = str.charCodeAt(i);
+        if (code >= 0xD800 && code <= 0xDBFF) {
+            has_surrogates = true;
+            break;
         }
     }
-    // Surrogate aware length
-    this.length = this.index_mapping.length;
+
+    if (has_surrogates) {
+        // Build index mapping only when needed
+        this.index_mapping = [];
+        for (var pos = 0; pos < len; pos++) {
+            this.index_mapping.push(pos);
+            var ch_code = str.charCodeAt(pos);
+            if (ch_code >= 0xD800 && ch_code <= 0xDBFF) {
+                pos++;
+            }
+        }
+        this.length = this.index_mapping.length;
+    } else {
+        // Fast path: no surrogates, length equals string length
+        this.length = len;
+    }
 }
 
 SurrogateAwareString.prototype.slice = function (index) {
-    if (this.index_mapping.length <= index) {
+    if (this.length <= index) {
         return "";
+    }
+    if (this.index_mapping === null) {
+        // Fast path: direct string access
+        return this.str.slice(index);
     }
     var surrogate_aware_index = this.index_mapping[index];
     return this.str.slice(surrogate_aware_index);
 };
 
 SurrogateAwareString.prototype.charAt = function (index) {
-    if (this.str.length <= index) {
+    if (this.length <= index) {
         return "";
+    }
+    if (this.index_mapping === null) {
+        // Fast path: direct character access
+        return this.str.charAt(index);
     }
     var surrogate_aware_start_index = this.index_mapping[index];
     var surrogate_aware_end_index = this.index_mapping[index + 1];
@@ -59,8 +85,12 @@ SurrogateAwareString.prototype.charAt = function (index) {
 };
 
 SurrogateAwareString.prototype.charCodeAt = function (index) {
-    if (this.index_mapping.length <= index) {
+    if (this.length <= index) {
         return NaN;
+    }
+    if (this.index_mapping === null) {
+        // Fast path: direct charCode access
+        return this.str.charCodeAt(index);
     }
     var surrogate_aware_index = this.index_mapping[index];
     var upper = this.str.charCodeAt(surrogate_aware_index);
@@ -80,12 +110,7 @@ SurrogateAwareString.prototype.toString = function () {
 
 SurrogateAwareString.isSurrogatePair = function (ch) {
     var utf16_code = ch.charCodeAt(0);
-    if (utf16_code >= 0xD800 && utf16_code <= 0xDBFF) {
-        // surrogate pair
-        return true;
-    } else {
-        return false;
-    }
+    return utf16_code >= 0xD800 && utf16_code <= 0xDBFF;
 };
 
 module.exports = SurrogateAwareString;

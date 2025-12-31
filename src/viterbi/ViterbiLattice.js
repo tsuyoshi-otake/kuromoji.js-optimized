@@ -18,6 +18,7 @@
 "use strict";
 
 var ViterbiNode = require("./ViterbiNode");
+var NODE_TYPE = ViterbiNode.NODE_TYPE;
 
 /**
  * ViterbiLattice is a lattice in Viterbi algorithm
@@ -25,7 +26,7 @@ var ViterbiNode = require("./ViterbiNode");
  */
 function ViterbiLattice() {
     this.nodes_end_at = [];
-    this.nodes_end_at[0] = [ new ViterbiNode(-1, 0, 0, 0, "BOS", 0, 0, "") ];
+    this.nodes_end_at[0] = [ new ViterbiNode(-1, 0, 0, 0, NODE_TYPE.BOS, 0, 0, "") ];
     this.eos_pos = 1;
 }
 
@@ -39,13 +40,13 @@ ViterbiLattice.prototype.append = function (node) {
         this.eos_pos = last_pos;
     }
 
-    var prev_nodes = this.nodes_end_at[last_pos];
+    var nodes_end_at = this.nodes_end_at;
+    var prev_nodes = nodes_end_at[last_pos];
     if (prev_nodes == null) {
-        prev_nodes = [];
+        nodes_end_at[last_pos] = [node];
+    } else {
+        prev_nodes.push(node);
     }
-    prev_nodes.push(node);
-
-    this.nodes_end_at[last_pos] = prev_nodes;
 };
 
 /**
@@ -54,7 +55,7 @@ ViterbiLattice.prototype.append = function (node) {
 ViterbiLattice.prototype.appendEos = function () {
     var last_index = this.nodes_end_at.length;
     this.eos_pos++;
-    this.nodes_end_at[last_index] = [ new ViterbiNode(-1, 0, this.eos_pos, 0, "EOS", 0, 0, "") ];
+    this.nodes_end_at[last_index] = [ new ViterbiNode(-1, 0, this.eos_pos, 0, NODE_TYPE.EOS, 0, 0, "") ];
 };
 
 module.exports = ViterbiLattice;

@@ -17,19 +17,31 @@
 
 "use strict";
 
+// Node type constants for V8 hidden class optimization
+var NODE_TYPE = {
+    BOS: 0,
+    EOS: 1,
+    KNOWN: 2,
+    UNKNOWN: 3
+};
+
+// Faster than Number.MAX_VALUE comparison
+var MAX_COST = 1000000000;
+
 /**
  * ViterbiNode is a node of ViterbiLattice
  * @param {number} node_name Word ID
  * @param {number} node_cost Word cost to generate
  * @param {number} start_pos Start position from 1
  * @param {number} length Word length
- * @param {string} type Node type (KNOWN, UNKNOWN, BOS, EOS, ...)
+ * @param {number} type Node type (use NODE_TYPE constants)
  * @param {number} left_id Left context ID
  * @param {number} right_id Right context ID
  * @param {string} surface_form Surface form of this word
  * @constructor
  */
 function ViterbiNode(node_name, node_cost, start_pos, length, type, left_id, right_id, surface_form) {
+    // Fixed property order for V8 hidden class stability
     this.name = node_name;
     this.cost = node_cost;
     this.start_pos = start_pos;
@@ -38,12 +50,10 @@ function ViterbiNode(node_name, node_cost, start_pos, length, type, left_id, rig
     this.right_id = right_id;
     this.prev = null;
     this.surface_form = surface_form;
-    if (type === "BOS") {
-        this.shortest_cost = 0;
-    } else {
-        this.shortest_cost = Number.MAX_VALUE;
-    }
+    this.shortest_cost = type === NODE_TYPE.BOS ? 0 : MAX_COST;
     this.type = type;
 }
 
 module.exports = ViterbiNode;
+module.exports.NODE_TYPE = NODE_TYPE;
+module.exports.MAX_COST = MAX_COST;

@@ -30,6 +30,8 @@ function UnknownDictionary() {
     this.target_map = {};  // class_id (of CharacterClass) -> token_info_id (of unknown class)
     this.pos_buffer = new ByteBuffer(10 * 1024 * 1024);
     this.character_definition = null;
+    this._features_cache = {};  // Cache for getFeatures results
+    this._features_array_cache = {};  // Cache for split feature arrays
 }
 
 // Inherit from TokenInfoDictionary as a super class
